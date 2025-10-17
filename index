@@ -1,0 +1,206 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Flipbook by John Doe and Jane Doe and Smith</title>
+  <!--
+    Static flipbook viewer (single-file)
+
+    Usage:
+    1. Put a PDF file at `myfile/book.pdf` in the same GitHub repository as this index.html.
+       (If you prefer another filename, change `PDF_PATH` in the script below.)
+    2. Commit and push to GitHub, enable GitHub Pages for the repository (usually choose the main branch and /root).
+    3. Open the site. The PDF will be rendered page-by-page into canvases and shown as a flipbook with smooth page-turn animation.
+
+    Notes & limitations:
+    - GitHub Pages is static and cannot list the contents of a directory, so this file expects the PDF at the exact path `myfile/book.pdf`.
+    - Rendering large PDFs may take time and memory on the client side.
+    - This implementation uses PDF.js to rasterize pages and turn.js for flip animation.
+  -->
+  <style>
+    :root{ --bg:#fafafa; --accent:#1f2937 }
+    html,body{height:100%;margin:0;font-family:system-ui,-apple-system,"Segoe UI",Roboto,Helvetica,Arial}
+    body{background:linear-gradient(180deg,#fff var(--bg),#f2f4f8);display:flex;flex-direction:column}
+    header{padding:18px 24px;background:#0f1724;color:white;display:flex;align-items:center;gap:16px}
+    header h1{font-size:18px;margin:0;font-weight:600}
+
+    .container{display:flex;flex-direction:column;align-items:center;flex:1;padding:20px}
+    #flipbook-wrap{max-width:1100px;width:100%;flex:1;display:flex;flex-direction:column;align-items:center}
+
+    /* Controls */
+    .controls{width:100%;display:flex;justify-content:space-between;align-items:center;margin-bottom:12px}
+    .btn{background:#111827;color:white;padding:8px 12px;border-radius:8px;border:none;cursor:pointer}
+    .btn:disabled{opacity:.5;cursor:default}
+    .pagecounter{color:#111827}
+
+    /* Flipbook area */
+    #flipbook{width:100%;max-width:960px;height:640px;margin:0 auto}
+    #flipbook .page{width:480px;height:640px}
+    #flipbook .page canvas{width:100%;height:100%;display:block}
+
+    /* responsive */
+    @media (max-width:900px){
+      #flipbook{max-width:720px;height:540px}
+      #flipbook .page{width:360px;height:540px}
+    }
+
+    @media (max-width:520px){
+      header h1{font-size:16px}
+      #flipbook{max-width:360px;height:480px}
+      #flipbook .page{width:180px;height:480px}
+    }
+
+    .loader{padding:12px;border-radius:8px;background:rgba(0,0,0,.06);margin-top:12px}
+  </style>
+</head>
+<body>
+  <header>
+    <img src="data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='32' height='32' viewBox='0 0 24 24'><rect width='24' height='24' rx='4' fill='%23fff' /><path d='M4 7h12v2H4zM4 11h12v2H4zM4 15h8v2H4z' fill='%23111727' opacity='.9'/></svg>" alt="logo" style="width:36px;height:36px;border-radius:8px;background:white;padding:4px;"/>
+    <h1>Flipbook by John Doe and Jane Doe and Smith</h1>
+  </header>
+
+  <div class="container">
+    <div id="flipbook-wrap">
+      <div class="controls">
+        <div>
+          <button class="btn" id="prevBtn">◀ Prev</button>
+          <button class="btn" id="nextBtn">Next ▶</button>
+        </div>
+        <div class="pagecounter" id="pageIndicator">Loading…</div>
+        <div>
+          <button class="btn" id="zoomOut">-</button>
+          <button class="btn" id="zoomIn">+</button>
+        </div>
+      </div>
+
+      <div id="flipbook" tabindex="0"></div>
+      <div class="loader" id="loader">This viewer renders the PDF page-by-page in your browser. Large files may take a moment.</div>
+    </div>
+  </div>
+
+  <!-- PDF.js (rasterize each page to canvas) -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.9.179/pdf.min.js"></script>
+  <!-- turn.js for page turning -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/turn.js/4.1.0/turn.min.js"></script>
+
+  <script>
+    // CONFIG
+    const PDF_PATH = 'myfile/book.pdf'; // <-- put your pdf file at `myfile/book.pdf`
+    const PAGE_WIDTH = 480; // base page width (will scale responsively)
+    const PAGE_HEIGHT = 640; // base page height
+
+    // state
+    let pdfDoc = null;
+    let currentZoom = 1;
+
+    const flipbookEl = document.getElementById('flipbook');
+    const loader = document.getElementById('loader');
+    const pageIndicator = document.getElementById('pageIndicator');
+
+    // init PDF.js
+    pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.9.179/pdf.worker.min.js';
+
+    async function loadPdf(url) {
+      try {
+        loader.textContent = 'Loading PDF...';
+        pdfDoc = await pdfjsLib.getDocument(url).promise;
+        loader.textContent = `PDF loaded — ${pdfDoc.numPages} pages. Rendering...`;
+        await renderAllPages();
+        loader.style.display = 'none';
+        initTurnJS();
+      } catch (e) {
+        loader.textContent = 'Failed to load PDF. Make sure the file exists at: ' + url;
+        console.error(e);
+      }
+    }
+
+    async function renderAllPages() {
+      flipbookEl.innerHTML = '';
+      const pages = [];
+      for (let i = 1; i <= pdfDoc.numPages; i++) {
+        const page = await pdfDoc.getPage(i);
+        const viewport = page.getViewport({ scale: 1 });
+        // create canvas sized to a base width while preserving ratio
+        const scale = PAGE_WIDTH / viewport.width;
+        const scaledViewport = page.getViewport({ scale });
+        const canvas = document.createElement('canvas');
+        canvas.width = scaledViewport.width;
+        canvas.height = scaledViewport.height;
+        const ctx = canvas.getContext('2d');
+        await page.render({ canvasContext: ctx, viewport: scaledViewport }).promise;
+
+        // wrap canvas inside a .page element for turn.js
+        const pageEl = document.createElement('div');
+        pageEl.className = 'page';
+        pageEl.appendChild(canvas);
+        flipbookEl.appendChild(pageEl);
+        pages.push(pageEl);
+
+        pageIndicator.textContent = `Page ${i} / ${pdfDoc.numPages}`;
+      }
+    }
+
+    function initTurnJS() {
+      // turn.js expects an even number of pages (pairs). If odd, add a blank page at end.
+      const total = flipbookEl.children.length;
+      if (total % 2 !== 0) {
+        const blank = document.createElement('div');
+        blank.className = 'page';
+        blank.innerHTML = '<div style="width:100%;height:100%;display:flex;align-items:center;justify-content:center;color:#9aa0a6">&nbsp;</div>';
+        flipbookEl.appendChild(blank);
+      }
+
+      // initialize turn
+      $(flipbookEl).turn({
+        width: flipbookEl.clientWidth,
+        height: flipbookEl.clientHeight,
+        autoCenter: true,
+        elevation: 50,
+        duration: 800, // smooth animation duration
+        gradients: true,
+        when: {
+          turned: function(e, page, view) {
+            pageIndicator.textContent = `Page ${page} / ${pdfDoc.numPages}`;
+          }
+        }
+      });
+
+      // Prev/Next
+      document.getElementById('prevBtn').addEventListener('click', ()=> $(flipbookEl).turn('previous'));
+      document.getElementById('nextBtn').addEventListener('click', ()=> $(flipbookEl).turn('next'));
+
+      // keyboard
+      window.addEventListener('keydown', (e)=>{
+        if (e.key === 'ArrowLeft') $(flipbookEl).turn('previous');
+        if (e.key === 'ArrowRight') $(flipbookEl).turn('next');
+      });
+
+      // zoom controls
+      document.getElementById('zoomIn').addEventListener('click', ()=> changeZoom(1.15));
+      document.getElementById('zoomOut').addEventListener('click', ()=> changeZoom(1/1.15));
+
+      // touch drag is supported by turn.js built-in
+      // make flipbook responsive on resize
+      window.addEventListener('resize', ()=>{
+        try { $(flipbookEl).turn('size', flipbookEl.clientWidth, flipbookEl.clientHeight); } catch(e){}
+      });
+    }
+
+    function changeZoom(factor) {
+      currentZoom *= factor;
+      // scale canvases
+      const canvases = flipbookEl.querySelectorAll('canvas');
+      canvases.forEach(cv => {
+        cv.style.transform = `scale(${currentZoom})`;
+        cv.style.transformOrigin = 'top left';
+      });
+      // adjust container size for turn.js
+      try { $(flipbookEl).turn('size', flipbookEl.clientWidth * currentZoom, flipbookEl.clientHeight * currentZoom); } catch(e){}
+    }
+
+    // start
+    loadPdf(PDF_PATH);
+  </script>
+</body>
+</html>
