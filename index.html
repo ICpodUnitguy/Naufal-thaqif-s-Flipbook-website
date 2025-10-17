@@ -1,210 +1,29 @@
-<!doctype html>
+<!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>9B Naufal Thaqif F. Purge</title>
-  <style>
-    :root {
-      --bg: #f5f5f7;
-      --text: #1d1d1f;
-      --accent: #0071e3;
-      --radius: 16px;
-      --shadow: 0 4px 14px rgba(0, 0, 0, 0.1);
-    }
-    html, body {
-      margin: 0;
-      height: 100%;
-      background: var(--bg);
-      color: var(--text);
-      font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Display', 'SF Pro Text', 'Helvetica Neue', Arial, sans-serif;
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-    }
-
-    header {
-      text-align: center;
-      font-weight: 600;
-      font-size: 1.1rem;
-      letter-spacing: 0.3px;
-      padding: 22px 0;
-      color: var(--text);
-    }
-
-    #flipbook-wrap {
-      width: 100%;
-      max-width: 900px;
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      flex: 1;
-      padding: 10px 0 40px 0;
-    }
-
-    #controls {
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      gap: 20px;
-      margin-bottom: 16px;
-    }
-
-    .btn {
-      background: var(--accent);
-      color: white;
-      border: none;
-      border-radius: 100px;
-      padding: 10px 18px;
-      font-size: 15px;
-      font-weight: 500;
-      letter-spacing: 0.2px;
-      cursor: pointer;
-      transition: background 0.3s ease;
-      box-shadow: var(--shadow);
-    }
-
-    .btn:hover {
-      background: #007aff;
-    }
-
-    #pageIndicator {
-      font-size: 14px;
-      color: #555;
-    }
-
-    #flipbook {
-      width: 100%;
-      max-width: 800px;
-      height: 600px;
-      box-shadow: var(--shadow);
-      border-radius: var(--radius);
-      overflow: hidden;
-      background: white;
-    }
-
-    #flipbook .page {
-      width: 400px;
-      height: 600px;
-      background: white;
-    }
-
-    #flipbook .page canvas {
-      width: 100%;
-      height: 100%;
-      display: block;
-      border-radius: var(--radius);
-    }
-
-    .loader {
-      margin-top: 18px;
-      font-size: 14px;
-      color: #777;
-    }
-
-    @media (max-width: 700px) {
-      #flipbook {
-        max-width: 90%;
-        height: 500px;
-      }
-      #flipbook .page {
-        width: 45%;
-        height: 500px;
-      }
-      .btn {
-        padding: 8px 14px;
-        font-size: 14px;
-      }
-    }
-  </style>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Flipbook by John Doe and Jane Doe and Smith</title>
+  <link rel="stylesheet" href="style.css" />
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.10.377/pdf.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/turn.js@4/turn.min.js"></script>
 </head>
 <body>
-  <header>9B Naufal Thaqif F. Purge</header>
+  <header>
+    <h1>Flipbook by John Doe and Jane Doe and Smith</h1>
+  </header>
 
-  <div id="flipbook-wrap">
-    <div id="controls">
-      <button class="btn" id="prevBtn">◀</button>
-      <div id="pageIndicator">Loading…</div>
-      <button class="btn" id="nextBtn">▶</button>
-    </div>
-
+  <div id="flipbook-container">
+    <div id="loading">Loading...</div>
     <div id="flipbook"></div>
-    <div class="loader" id="loader">Rendering your flipbook...</div>
   </div>
 
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.9.179/pdf.min.js"></script>
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/turn.js/4.1.0/turn.min.js"></script>
-  <script>
-    const PDF_PATH = 'myfile/book.pdf';
-    const PAGE_WIDTH = 400;
-    const PAGE_HEIGHT = 600;
-    let pdfDoc = null;
+  <div class="controls">
+    <button id="prevBtn">←</button>
+    <button id="nextBtn">→</button>
+  </div>
 
-    const flipbookEl = document.getElementById('flipbook');
-    const loader = document.getElementById('loader');
-    const pageIndicator = document.getElementById('pageIndicator');
-
-    pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.9.179/pdf.worker.min.js';
-
-    async function loadPdf(url) {
-      try {
-        loader.textContent = 'Loading PDF...';
-        pdfDoc = await pdfjsLib.getDocument(url).promise;
-        loader.textContent = `Loaded ${pdfDoc.numPages} pages...`;
-        await renderPages();
-        loader.style.display = 'none';
-        initFlipbook();
-      } catch (e) {
-        loader.textContent = 'Failed to load PDF.';
-        console.error(e);
-      }
-    }
-
-    async function renderPages() {
-      flipbookEl.innerHTML = '';
-      for (let i = 1; i <= pdfDoc.numPages; i++) {
-        const page = await pdfDoc.getPage(i);
-        const viewport = page.getViewport({ scale: 1 });
-        const scale = PAGE_WIDTH / viewport.width;
-        const scaledViewport = page.getViewport({ scale });
-        const canvas = document.createElement('canvas');
-        canvas.width = scaledViewport.width;
-        canvas.height = scaledViewport.height;
-        const ctx = canvas.getContext('2d');
-        await page.render({ canvasContext: ctx, viewport: scaledViewport }).promise;
-
-        const pageEl = document.createElement('div');
-        pageEl.className = 'page';
-        pageEl.appendChild(canvas);
-        flipbookEl.appendChild(pageEl);
-        pageIndicator.textContent = `Page ${i} / ${pdfDoc.numPages}`;
-      }
-    }
-
-    function initFlipbook() {
-      $(flipbookEl).turn({
-        width: flipbookEl.clientWidth,
-        height: flipbookEl.clientHeight,
-        autoCenter: true,
-        duration: 800,
-        gradients: true,
-        when: {
-          turned: (e, page) => {
-            pageIndicator.textContent = `Page ${page} / ${pdfDoc.numPages}`;
-          }
-        }
-      });
-
-      document.getElementById('prevBtn').onclick = () => $(flipbookEl).turn('previous');
-      document.getElementById('nextBtn').onclick = () => $(flipbookEl).turn('next');
-      window.addEventListener('keydown', e => {
-        if (e.key === 'ArrowLeft') $(flipbookEl).turn('previous');
-        if (e.key === 'ArrowRight') $(flipbookEl).turn('next');
-      });
-    }
-
-    loadPdf(PDF_PATH);
-  </script>
+  <script src="script.js"></script>
 </body>
 </html>
 
